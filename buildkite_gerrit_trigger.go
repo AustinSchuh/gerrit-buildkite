@@ -453,7 +453,21 @@ func main() {
 			case "change-abandoned":
 			case "change-deleted":
 			case "change-merged":
-				// TODO(austin): Trigger a master build?
+				if eventInfo.RefName == "refs/heads/master" && eventInfo.Change.Status == "MERGED" {
+					if build, _, err := client.Builds.Create(
+						state.BuildkiteOrganization, state.Project, &buildkite.CreateBuild{
+							Commit: eventInfo.NewRev,
+							Branch: "master",
+							Author: buildkite.Author{
+								Name:  eventInfo.Submitter.Name,
+								Email: eventInfo.Submitter.Email,
+							},
+						}); err == nil {
+						log.Printf("Scheduled master build %s\n", *build.ID)
+					} else {
+						log.Printf("Failed to schedule master build %v", err)
+					}
+				}
 			case "change-restored":
 			case "comment-added":
 				if matched, _ := regexp.MatchString(`(?m)^retest$`, eventInfo.Comment); !matched {
