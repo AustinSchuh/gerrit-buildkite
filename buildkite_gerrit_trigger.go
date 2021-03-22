@@ -209,23 +209,30 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 
 }
 
+type BuildkiteChange struct {
+	ID     string `json:"id,omitempty"`
+	Number int    `json:"number,omitempty"`
+	URL    string `json:"url,omitempty"`
+}
+
 type Build struct {
-	ID           string `json:"id,omitempty"`
-	GraphqlId    string `json:"graphql_id,omitempty"`
-	URL          string `json:"url,omitempty"`
-	WebURL       string `json:"web_url,omitempty"`
-	Number       int    `json:"number,omitempty"`
-	State        string `json:"state,omitempty"`
-	Blocked      bool   `json:"blocked,omitempty"`
-	BlockedState string `json:"blocked_state,omitempty"`
-	Message      string `json:"message,omitempty"`
-	Commit       string `json:"commit"`
-	Branch       string `json:"branch"`
-	Source       string `json:"source,omitempty"`
-	CreatedAt    string `json:"created_at,omitempty"`
-	ScheduledAt  string `json:"scheduled_at,omitempty"`
-	StartedAt    string `json:"started_at,omitempty"`
-	FinishedAt   string `json:"finished_at,omitempty"`
+	ID           string           `json:"id,omitempty"`
+	GraphqlId    string           `json:"graphql_id,omitempty"`
+	URL          string           `json:"url,omitempty"`
+	WebURL       string           `json:"web_url,omitempty"`
+	Number       int              `json:"number,omitempty"`
+	State        string           `json:"state,omitempty"`
+	Blocked      bool             `json:"blocked,omitempty"`
+	BlockedState string           `json:"blocked_state,omitempty"`
+	Message      string           `json:"message,omitempty"`
+	Commit       string           `json:"commit"`
+	Branch       string           `json:"branch"`
+	Source       string           `json:"source,omitempty"`
+	CreatedAt    string           `json:"created_at,omitempty"`
+	ScheduledAt  string           `json:"scheduled_at,omitempty"`
+	StartedAt    string           `json:"started_at,omitempty"`
+	FinishedAt   string           `json:"finished_at,omitempty"`
+	RebuiltFrom  *BuildkiteChange `json:"rebuilt_from,omitempty"`
 }
 
 type BuildkiteWebhook struct {
@@ -265,13 +272,45 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 
 		// We've successfully received the webhook.  Spawn a goroutine in case the mutex is blocked so we don't block this thread.
 		f := func() {
-			if webhook.Event == "build.finished" {
+			if webhook.Event == "build.running" {
+				if webhook.Build.RebuiltFrom != nil {
+					s.mu.Lock()
+					if c, ok := s.Commits[webhook.Build.RebuiltFrom.ID]; ok {
+						log.Printf("Detected a rebuild of %s for build %s", webhook.Build.RebuiltFrom.ID, webhook.Build.ID)
+						s.Commits[webhook.Build.ID] = c
+
+						// And now remove the vote since the rebuild started.
+						cmd := exec.Command("ssh",
+							"-p",
+							"29418",
+							"-i",
+							s.Key,
+							s.User+"@software.frc971.org",
+							"gerrit",
+							"review",
+							"-m",
+							fmt.Sprintf("\"Build Started: %s\"", webhook.Build.WebURL),
+							"--verified",
+							"0",
+							fmt.Sprintf("%d,%d", c.ChangeNumber, c.Patchset))
+
+						log.Printf("Running 'ssh -p 29418 -i %s %s@software.frc971.org gerrit review -m '\"Build Started: %s\"' --verified 0 %d,%d' and waiting for it to finish...",
+							s.Key, s.User,
+							webhook.Build.WebURL, c.ChangeNumber, c.Patchset)
+						if err := cmd.Run(); err != nil {
+							log.Printf("Command failed with error: %v", err)
+						}
+					}
+					s.mu.Unlock()
+				}
+			} else if webhook.Event == "build.finished" {
 				var commit *Commit
 				{
 					s.mu.Lock()
 					if c, ok := s.Commits[webhook.Build.ID]; ok {
 						commit = &c
-						delete(s.Commits, webhook.Build.ID)
+						// While we *should* delete this now from the map, that will prevent rebuilds from being mapped correctly.
+						// Instead, leave it in the map indefinately.  For the number of builds we do, it should take quite a while to use enough ram to matter.  If that becomes an issue, we can either clean the list when a commit is submitted, or keep a fixed number of builds in the list and expire the oldest ones when it is time.
 					}
 					s.mu.Unlock()
 				}
@@ -346,13 +385,13 @@ func main() {
 	flag.Parse()
 
 	state := State{
-		Key:     *key,
-		User:    *user,
-		Commits: make(map[string]Commit),
-		Token:   *webhookToken,
-                Server: *server,
-                Project: *project,
-                BuildkiteOrganization: *buildkiteOrganization,
+		Key:                   *key,
+		User:                  *user,
+		Commits:               make(map[string]Commit),
+		Token:                 *webhookToken,
+		Server:                *server,
+		Project:               *project,
+		BuildkiteOrganization: *buildkiteOrganization,
 	}
 
 	f := func() {
