@@ -95,7 +95,12 @@ type EventInfo struct {
 	Author         *User      `json:"author"`
 	Uploader       *User      `json:"uploader"`
 	Reviewer       *User      `json:"reviewer"`
+	Adder          *User      `json:"adder"`
+	Remover        *User      `json:"remover"`
 	Submitter      User       `json:"submitter,omitempty"`
+	NewRev         string     `json:"newRev,omitempty"`
+	Ref            string     `json:"ref,omitempty"`
+	TargetNode     string     `json:"targetNode,omitempty"`
 	Approvals      []Approval `json:"approvals,omitempty"`
 	Comment        string     `json:"comment,omitempty"`
 	PatchSet       *PatchSet  `json:"patchSet"`
