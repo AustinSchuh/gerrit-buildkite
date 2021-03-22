@@ -93,6 +93,7 @@ type RefUpdate struct {
 type EventInfo struct {
 	Author         *User      `json:"author"`
 	Uploader       *User      `json:"uploader"`
+	Reviewer       *User      `json:"reviewer"`
 	Submitter      User       `json:"submitter,omitempty"`
 	Approvals      []Approval `json:"approvals,omitempty"`
 	Comment        string     `json:"comment,omitempty"`
