@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Commit struct {
@@ -131,74 +132,79 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 	log.Printf("Got a matching change of %s %s %d,%d\n",
 		eventInfo.Change.ID, eventInfo.PatchSet.Revision, eventInfo.Change.Number, eventInfo.PatchSet.Number)
 
-	// Triggering a build creates a UUID, and we can see events back from the webhook before the command returns.  Lock across the command so nothing access Commits while the new UUID is being added.
-	s.mu.Lock()
+	for {
+		// Triggering a build creates a UUID, and we can see events back from the webhook before the command returns.  Lock across the command so nothing access Commits while the new UUID is being added.
+		s.mu.Lock()
 
-	var user *User
-	if eventInfo.Author != nil {
-		user = eventInfo.Author
-	} else if eventInfo.Uploader != nil {
-		user = eventInfo.Uploader
-	} else {
-		log.Fatalf("Failed to find Author or Uploader")
-	}
-
-	// Trigger the build.
-	if build, _, err := client.Builds.Create(
-		s.BuildkiteOrganization, s.Project, &buildkite.CreateBuild{
-			Commit: eventInfo.PatchSet.Revision,
-			Branch: eventInfo.Change.ID,
-			Author: buildkite.Author{
-				Name:  user.Name,
-				Email: user.Email,
-			},
-			Env: map[string]string{
-				"GERRIT_CHANGE_NUMBER": fmt.Sprintf("%d", eventInfo.Change.Number),
-				"GERRIT_PATCH_NUMBER":  fmt.Sprintf("%d", eventInfo.PatchSet.Number),
-			},
-		}); err == nil {
-
-		if build.ID != nil {
-			log.Printf("Scheduled build %s\n", *build.ID)
-			s.Commits[*build.ID] = Commit{
-				Sha1:         eventInfo.PatchSet.Revision,
-				ChangeId:     eventInfo.Change.ID,
-				ChangeNumber: eventInfo.Change.Number,
-				Patchset:     eventInfo.PatchSet.Number,
-			}
-		}
-		s.mu.Unlock()
-
-		if data, err := json.MarshalIndent(build, "", "\t"); err != nil {
-			log.Fatalf("json encode failed: %s", err)
+		var user *User
+		if eventInfo.Author != nil {
+			user = eventInfo.Author
+		} else if eventInfo.Uploader != nil {
+			user = eventInfo.Uploader
 		} else {
-			log.Printf("%s\n", string(data))
+			log.Fatalf("Failed to find Author or Uploader")
 		}
 
-		// Now remove the verified from Gerrit and post the link.
-		cmd := exec.Command("ssh",
-			"-p",
-			"29418",
-			"-i",
-			s.Key,
-			s.User+"@"+s.Server,
-			"gerrit",
-			"review",
-			"-m",
-			fmt.Sprintf("\"Build Started: %s\"", *build.WebURL),
-			"--verified",
-			"0",
-			fmt.Sprintf("%d,%d", eventInfo.Change.Number, eventInfo.PatchSet.Number))
+		// Trigger the build.
+		if build, _, err := client.Builds.Create(
+			s.BuildkiteOrganization, s.Project, &buildkite.CreateBuild{
+				Commit: eventInfo.PatchSet.Revision,
+				Branch: eventInfo.Change.ID,
+				Author: buildkite.Author{
+					Name:  user.Name,
+					Email: user.Email,
+				},
+				Env: map[string]string{
+					"GERRIT_CHANGE_NUMBER": fmt.Sprintf("%d", eventInfo.Change.Number),
+					"GERRIT_PATCH_NUMBER":  fmt.Sprintf("%d", eventInfo.PatchSet.Number),
+				},
+			}); err == nil {
 
-		log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' --verified 0 %d,%d' and waiting for it to finish...",
-			s.Key, s.User, s.Server,
-			*build.WebURL, eventInfo.Change.Number, eventInfo.PatchSet.Number)
-		if err := cmd.Run(); err != nil {
-			log.Printf("Command failed with error: %v", err)
+			if build.ID != nil {
+				log.Printf("Scheduled build %s\n", *build.ID)
+				s.Commits[*build.ID] = Commit{
+					Sha1:         eventInfo.PatchSet.Revision,
+					ChangeId:     eventInfo.Change.ID,
+					ChangeNumber: eventInfo.Change.Number,
+					Patchset:     eventInfo.PatchSet.Number,
+				}
+			}
+			s.mu.Unlock()
+
+			if data, err := json.MarshalIndent(build, "", "\t"); err != nil {
+				log.Fatalf("json encode failed: %s", err)
+			} else {
+				log.Printf("%s\n", string(data))
+			}
+
+			// Now remove the verified from Gerrit and post the link.
+			cmd := exec.Command("ssh",
+				"-p",
+				"29418",
+				"-i",
+				s.Key,
+				s.User+"@"+s.Server,
+				"gerrit",
+				"review",
+				"-m",
+				fmt.Sprintf("\"Build Started: %s\"", *build.WebURL),
+				"--verified",
+				"0",
+				fmt.Sprintf("%d,%d", eventInfo.Change.Number, eventInfo.PatchSet.Number))
+
+			log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' --verified 0 %d,%d' and waiting for it to finish...",
+				s.Key, s.User, s.Server,
+				*build.WebURL, eventInfo.Change.Number, eventInfo.PatchSet.Number)
+			if err := cmd.Run(); err != nil {
+				log.Printf("Command failed with error: %v", err)
+			}
+			return
+		} else {
+			s.mu.Unlock()
+			log.Fatalf("Failed to trigger build: %s", err)
+			log.Printf("Trying again in 30 seconds")
+			time.Sleep(30 * time.Second)
 		}
-	} else {
-		s.mu.Unlock()
-		log.Fatalf("Failed to trigger build: %s", err)
 	}
 
 }
