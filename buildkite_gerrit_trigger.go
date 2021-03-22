@@ -32,11 +32,11 @@ type State struct {
 	Key     string
 	// Webhook token expected to service requests
 	Token string
-        // Gerrit server to connect to.
+	// Gerrit server to connect to.
 	Server string
 	// Project in gerrit to only accept events from.
 	Project string
-        // Organization to use in Buildkite for the build.
+	// Organization to use in Buildkite for the build.
 	BuildkiteOrganization string
 }
 
