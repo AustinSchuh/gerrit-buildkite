@@ -37,6 +37,8 @@ type State struct {
 	Server string
 	// Project in gerrit to only accept events from.
 	Project string
+	// BuildkiteProject in gerrit to only accept events from.
+	BuildkiteProject string
 	// Organization to use in Buildkite for the build.
 	BuildkiteOrganization string
 }
@@ -155,7 +157,7 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 
 		// Trigger the build.
 		if build, _, err := client.Builds.Create(
-			s.BuildkiteOrganization, s.Project, &buildkite.CreateBuild{
+			s.BuildkiteOrganization, s.BuildkiteProject, &buildkite.CreateBuild{
 				Commit: eventInfo.PatchSet.Revision,
 				Branch: eventInfo.Change.ID,
 				Author: buildkite.Author{
@@ -394,6 +396,7 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable debugging")
 	server := flag.String("server", "software.frc971.org", "Gerrit server to connect to")
 	project := flag.String("project", "971-Robot-Code", "Project to filter events for")
+	buildkiteProject := flag.String("buildkite_project", "971-Robot-Code", "Buildkite project to trigger")
 	buildkiteOrganization := flag.String("organization", "spartan-robotics", "Project to filter events for")
 
 	flag.Parse()
@@ -404,6 +407,7 @@ func main() {
 		Commits:               make(map[string]Commit),
 		Token:                 *webhookToken,
 		Server:                *server,
+		BuildkiteProject:      *buildkiteProject,
 		Project:               *project,
 		BuildkiteOrganization: *buildkiteOrganization,
 	}
@@ -464,7 +468,7 @@ func main() {
 			case "change-merged":
 				if eventInfo.RefName == "refs/heads/master" && eventInfo.Change.Status == "MERGED" {
 					if build, _, err := client.Builds.Create(
-						state.BuildkiteOrganization, state.Project, &buildkite.CreateBuild{
+						state.BuildkiteOrganization, state.BuildkiteProject, &buildkite.CreateBuild{
 							Commit: eventInfo.NewRev,
 							Branch: "master",
 							Author: buildkite.Author{
