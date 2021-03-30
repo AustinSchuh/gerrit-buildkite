@@ -296,7 +296,7 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 							"29418",
 							"-i",
 							s.Key,
-							s.User+"@software.frc971.org",
+							s.User+"@"+s.Server,
 							"gerrit",
 							"review",
 							"-m",
@@ -308,8 +308,8 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 							"0",
 							fmt.Sprintf("%d,%d", c.ChangeNumber, c.Patchset))
 
-						log.Printf("Running 'ssh -p 29418 -i %s %s@software.frc971.org gerrit review -m '\"Build Started: %s\"' -n NONE --verified 0 %d,%d' and waiting for it to finish...",
-							s.Key, s.User,
+						log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --verified 0 %d,%d' and waiting for it to finish...",
+							s.Key, s.User, s.Server,
 							webhook.Build.WebURL, c.ChangeNumber, c.Patchset)
 						if err := cmd.Run(); err != nil {
 							log.Printf("Command failed with error: %v", err)
