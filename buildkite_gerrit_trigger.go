@@ -68,16 +68,19 @@ type PatchSet struct {
 }
 
 type Change struct {
-	Project       string `json:"project"`
-	Branch        string `json:"branch"`
-	ID            string `json:"id"`
-	Number        int    `json:"number"`
-	Subject       string `json:"subject"`
-	Owner         User   `json:"owner"`
-	URL           string `json:"url"`
-	CommitMessage string `json:"commitMessage"`
-	CreatedOn     int    `json:"createdOn"`
-	Status        string `json:"status"`
+	Project              string `json:"project"`
+	Branch               string `json:"branch"`
+	ID                   string `json:"id"`
+	Number               int    `json:"number"`
+	Subject              string `json:"subject"`
+	Owner                User   `json:"owner"`
+	URL                  string `json:"url"`
+	CommitMessage        string `json:"commitMessage"`
+	CherryPickOfChange   int    `json:"cherryPickOfChange,omitempty"`
+	CherryPickOfPatchSet int    `json:"cherryPickOfPatchSet,omitempty"`
+	CreatedOn            int    `json:"createdOn"`
+	Status               string `json:"status"`
+	Wip                  bool   `json:"wip,omitempty"`
 }
 
 type ChangeKey struct {
