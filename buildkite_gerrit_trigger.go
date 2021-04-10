@@ -506,6 +506,9 @@ func main() {
 			case "wip-state-changed":
 			case "private-state-changed":
 			case "vote-deleted":
+			case "ref-replicated":
+			case "ref-replication-done":
+			case "ref-replication-scheduled":
 			default:
 				log.Println("Unknown case")
 			}
