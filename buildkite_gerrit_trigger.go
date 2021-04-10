@@ -76,6 +76,7 @@ type Change struct {
 	Number               int    `json:"number"`
 	Subject              string `json:"subject"`
 	Owner                User   `json:"owner"`
+	Assignee             *User  `json:"assignee,omitempty"`
 	URL                  string `json:"url"`
 	CommitMessage        string `json:"commitMessage"`
 	CherryPickOfChange   int    `json:"cherryPickOfChange,omitempty"`
@@ -97,6 +98,7 @@ type RefUpdate struct {
 }
 
 type EventInfo struct {
+	Abandoner      *User      `json:"abandoner,omitempty"`
 	Author         *User      `json:"author"`
 	Uploader       *User      `json:"uploader"`
 	Reviewer       *User      `json:"reviewer"`
@@ -115,7 +117,11 @@ type EventInfo struct {
 	ChangeKey      ChangeKey  `json:"changeKey"`
 	RefUpdate      *RefUpdate `json:"refUpdate"`
 	Type           string     `json:"type"`
+	Reason         string     `json:"reason,omitempty"`
 	EventCreatedOn int        `json:"eventCreatedOn"`
+	Status         string     `json:"status,omitempty"`
+	RefStatus      string     `json:"refStatus,omitempty"`
+	NodesCount     int        `json:"nodesCount,omitempty"`
 }
 
 // Simple application to poll Gerrit for events and trigger builds on buildkite when one happens.
