@@ -472,21 +472,6 @@ func main() {
 			case "change-abandoned":
 			case "change-deleted":
 			case "change-merged":
-				if eventInfo.RefName == "refs/heads/master" && eventInfo.Change.Status == "MERGED" {
-					if build, _, err := client.Builds.Create(
-						state.BuildkiteOrganization, state.BuildkiteProject, &buildkite.CreateBuild{
-							Commit: eventInfo.NewRev,
-							Branch: "master",
-							Author: buildkite.Author{
-								Name:  eventInfo.Submitter.Name,
-								Email: eventInfo.Submitter.Email,
-							},
-						}); err == nil {
-						log.Printf("Scheduled master build %s\n", *build.ID)
-					} else {
-						log.Printf("Failed to schedule master build %v", err)
-					}
-				}
 			case "change-restored":
 			case "comment-added":
 				if matched, _ := regexp.MatchString(`(?m)^retest$`, eventInfo.Comment); !matched {
@@ -500,6 +485,21 @@ func main() {
 			case "patchset-created":
 				state.handleEvent(eventInfo, client)
 			case "ref-updated":
+				if eventInfo.RefUpdate.RefName == "refs/heads/master" {
+					if build, _, err := client.Builds.Create(
+						state.BuildkiteOrganization, state.BuildkiteProject, &buildkite.CreateBuild{
+							Commit: eventInfo.RefUpdate.NewRev,
+							Branch: "master",
+							Author: buildkite.Author{
+								Name:  eventInfo.Submitter.Name,
+								Email: eventInfo.Submitter.Email,
+							},
+						}); err == nil {
+						log.Printf("Scheduled master build %s\n", *build.ID)
+					} else {
+						log.Printf("Failed to schedule master build %v", err)
+					}
+				}
 			case "reviewer-added":
 			case "reviewer-deleted":
 			case "topic-changed":
