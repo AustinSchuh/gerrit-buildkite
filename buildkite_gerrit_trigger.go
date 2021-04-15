@@ -3,10 +3,13 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/buildkite/go-buildkite/buildkite"
+	_ "github.com/mattn/go-sqlite3"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -25,12 +28,11 @@ type Commit struct {
 }
 
 type State struct {
-	// This mutex needs to be locked across anything which generates a uuid or accesses Commits.
+	// This mutex needs to be locked across anything which generates a uuid or calls {Get,Add}Commit.
 	mu sync.Mutex
-	// Mapping from build UUID from buildkite to the Commit information which triggered it.
-	Commits map[string]Commit
-	User    string
-	Key     string
+
+	User string
+	Key  string
 	// Webhook token expected to service requests
 	Token string
 	// Gerrit server to connect to.
@@ -41,6 +43,85 @@ type State struct {
 	BuildkiteProject string
 	// Organization to use in Buildkite for the build.
 	BuildkiteOrganization string
+
+	// Database to hold commits.
+	DB *sql.DB
+}
+
+func (s *State) OpenDatabase(database string) {
+	db, err := sql.Open("sqlite3", database)
+
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+
+	// Create a build counter table with a key of "id", and a "count" column only if it doesn't exist.
+	sqlStmt := `
+        create table if not exists buildkite (id text not null primary key, sha1 text, changeid text, changenumber integer, patchset integer);
+        `
+	_, err = db.Exec(sqlStmt)
+	if err != nil {
+		log.Fatalf("%q: %s\n", err, sqlStmt)
+		return
+	}
+
+	s.DB = db
+}
+
+func (s *State) CloseDatabase() {
+	if s.DB == nil {
+		log.Fatalf("Closing nil database")
+	}
+	s.DB.Close()
+	s.DB = nil
+}
+
+// Reads our commit from the database.
+func (s *State) GetCommit(id string) (Commit, bool) {
+	ctx := context.Background()
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer tx.Commit()
+
+	var commit Commit
+	statement, err := tx.PrepareContext(ctx, "select sha1, changeid, changenumber, patchset from buildkite where id = ?")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = statement.QueryRow(id).Scan(&commit.Sha1, &commit.ChangeId, &commit.ChangeNumber, &commit.Patchset)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Fatalf("Failed to query: '%v'", err)
+		}
+		return commit, false
+	} else {
+		return commit, true
+	}
+}
+
+// Writes our commit to the database.
+func (s *State) AddCommit(id string, commit Commit) {
+	ctx := context.Background()
+	// Use a transaction so we do the atomic read, add, write.
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer tx.Commit()
+
+	statement, err := tx.PrepareContext(ctx, "insert into buildkite (id, sha1, changeid, changenumber, patchset) VALUES (?, ?, ?, ?, ?)")
+	if err != nil {
+		log.Fatalf("Failed to insert %s", err)
+	}
+	_, err = statement.Exec(id, commit.Sha1, commit.ChangeId, commit.ChangeNumber, commit.Patchset)
+	if err != nil {
+		log.Fatalf("Failed to exec: %s", err)
+	}
 }
 
 // Simple application to poll Gerrit for events and trigger builds on buildkite when one happens.
@@ -68,9 +149,6 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 		eventInfo.Change.ID, eventInfo.PatchSet.Revision, eventInfo.Change.Number, eventInfo.PatchSet.Number)
 
 	for {
-		// Triggering a build creates a UUID, and we can see events back from the webhook before the command returns.  Lock across the command so nothing access Commits while the new UUID is being added.
-		s.mu.Lock()
-
 		var user *User
 		if eventInfo.Author != nil {
 			user = eventInfo.Author
@@ -79,6 +157,9 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 		} else {
 			log.Fatalf("Failed to find Author or Uploader")
 		}
+
+		// Triggering a build creates a UUID, and we can see events back from the webhook before the command returns.  Lock across the command so nothing access commits while the new UUID is being added.
+		s.mu.Lock()
 
 		// Trigger the build.
 		if build, _, err := client.Builds.Create(
@@ -97,12 +178,12 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 
 			if build.ID != nil {
 				log.Printf("Scheduled build %s\n", *build.ID)
-				s.Commits[*build.ID] = Commit{
+				s.AddCommit(*build.ID, Commit{
 					Sha1:         eventInfo.PatchSet.Revision,
 					ChangeId:     eventInfo.Change.ID,
 					ChangeNumber: eventInfo.Change.Number,
 					Patchset:     eventInfo.PatchSet.Number,
-				}
+				})
 			}
 			s.mu.Unlock()
 
@@ -181,9 +262,9 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 			if webhook.Event == "build.running" {
 				if webhook.Build.RebuiltFrom != nil {
 					s.mu.Lock()
-					if c, ok := s.Commits[webhook.Build.RebuiltFrom.ID]; ok {
+					if c, ok := s.GetCommit(webhook.Build.RebuiltFrom.ID); ok {
 						log.Printf("Detected a rebuild of %s for build %s", webhook.Build.RebuiltFrom.ID, webhook.Build.ID)
-						s.Commits[webhook.Build.ID] = c
+						s.AddCommit(webhook.Build.ID, c)
 
 						// And now remove the vote since the rebuild started.
 						cmd := exec.Command("ssh",
@@ -216,10 +297,8 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 				var commit *Commit
 				{
 					s.mu.Lock()
-					if c, ok := s.Commits[webhook.Build.ID]; ok {
+					if c, ok := s.GetCommit(webhook.Build.ID); ok {
 						commit = &c
-						// While we *should* delete this now from the map, that will prevent rebuilds from being mapped correctly.
-						// Instead, leave it in the map indefinately.  For the number of builds we do, it should take quite a while to use enough ram to matter.  If that becomes an issue, we can either clean the list when a commit is submitted, or keep a fixed number of builds in the list and expire the oldest ones when it is time.
 					}
 					s.mu.Unlock()
 				}
@@ -291,19 +370,22 @@ func main() {
 	project := flag.String("project", "971-Robot-Code", "Project to filter events for")
 	buildkiteProject := flag.String("buildkite_project", "971-Robot-Code", "Buildkite project to trigger")
 	buildkiteOrganization := flag.String("organization", "spartan-robotics", "Project to filter events for")
+	database := flag.String("database", "/data/buildkite/buildkite.db", "Database to store builds in.")
 
 	flag.Parse()
 
 	state := State{
 		Key:                   *key,
 		User:                  *user,
-		Commits:               make(map[string]Commit),
 		Token:                 *webhookToken,
 		Server:                *server,
 		BuildkiteProject:      *buildkiteProject,
 		Project:               *project,
 		BuildkiteOrganization: *buildkiteOrganization,
 	}
+
+	state.OpenDatabase(*database)
+	defer state.CloseDatabase()
 
 	f := func() {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
