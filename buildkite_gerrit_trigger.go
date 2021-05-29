@@ -416,10 +416,14 @@ func main() {
 		args := fmt.Sprintf("-o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i %s -p 29418 %s@%s gerrit stream-events", state.Key, state.User, state.Server)
 		cmd := exec.Command("ssh", strings.Split(args, " ")...)
 
+		log.Printf("Command: ssh %s\n", args)
+
 		stdout, _ := cmd.StdoutPipe()
 		cmd.Start()
 
 		scanner := bufio.NewScanner(stdout)
+		maxBufferSize := 1024 * 1024
+		scanner.Buffer(make([]byte, maxBufferSize), maxBufferSize)
 		scanner.Split(bufio.ScanLines)
 		for scanner.Scan() {
 			m := scanner.Text()
@@ -482,6 +486,7 @@ func main() {
 				log.Println("Unknown case")
 			}
 		}
+		log.Println("Finished scanning, going to wait")
 		cmd.Wait()
 	}
 }
