@@ -458,7 +458,7 @@ func main() {
 			case "patchset-created":
 				state.handleEvent(eventInfo, client)
 			case "ref-updated":
-				if eventInfo.RefUpdate.RefName == "refs/heads/master" {
+				if eventInfo.RefUpdate.RefName == "refs/heads/master" && eventInfo.RefUpdate.Project == state.Project {
 					if build, _, err := client.Builds.Create(
 						state.BuildkiteOrganization, state.BuildkiteProject, &buildkite.CreateBuild{
 							Commit: eventInfo.RefUpdate.NewRev,
