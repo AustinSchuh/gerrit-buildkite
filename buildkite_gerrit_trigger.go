@@ -220,7 +220,7 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 			return
 		} else {
 			s.mu.Unlock()
-			log.Fatalf("Failed to trigger build: %s", err)
+			log.Printf("Failed to trigger build: %s", err)
 			log.Printf("Trying again in 30 seconds")
 			time.Sleep(30 * time.Second)
 		}
