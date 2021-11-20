@@ -67,6 +67,7 @@ type EventInfo struct {
 	NewRev         string     `json:"newRev,omitempty"`
 	Ref            string     `json:"ref,omitempty"`
 	TargetNode     string     `json:"targetNode,omitempty"`
+	TargetUri      string     `json:"targetUri,omitempty"`
 	Approvals      []Approval `json:"approvals,omitempty"`
 	Comment        string     `json:"comment,omitempty"`
 	PatchSet       *PatchSet  `json:"patchSet"`
