@@ -264,7 +264,14 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 					s.mu.Lock()
 					if c, ok := s.GetCommit(webhook.Build.RebuiltFrom.ID); ok {
 						log.Printf("Detected a rebuild of %s for build %s", webhook.Build.RebuiltFrom.ID, webhook.Build.ID)
-						s.AddCommit(webhook.Build.ID, c)
+
+						// only add commit to DB if not already there
+						// if it is already there then this is probably a retry of a step
+						if c, ok := s.GetCommit(webhook.Build.ID); !ok {
+							s.AddCommit(webhook.Build.ID, c)
+						} else {
+							log.Printf("This is a retried step.")
+						}
 
 						// And now remove the vote since the rebuild started.
 						cmd := exec.Command("ssh",
