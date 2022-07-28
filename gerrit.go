@@ -43,6 +43,7 @@ type Change struct {
 	CreatedOn            int    `json:"createdOn"`
 	Status               string `json:"status"`
 	Wip                  bool   `json:"wip,omitempty"`
+	Topic                string `json:"topic,omitempty"`
 }
 
 type ChangeKey struct {
@@ -82,4 +83,6 @@ type EventInfo struct {
 	Status         string     `json:"status,omitempty"`
 	RefStatus      string     `json:"refStatus,omitempty"`
 	NodesCount     int        `json:"nodesCount,omitempty"`
+	OldTopic       string     `json:"oldTopic,omitempty"`
+	Changer        *User      `json:"changer,omitempty"`
 }
