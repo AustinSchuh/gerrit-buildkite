@@ -88,6 +88,8 @@ type EventInfo struct {
 	OldTopic       string     `json:"oldTopic,omitempty"`
 	Changer        *User      `json:"changer,omitempty"`
 	Editor         *User      `json:"editor,omitempty"`
+	Restorer       *User      `json:"restorer,omitempty"`
+	OldAssignee    *User      `json:"oldAssignee,omitempty"`
 	Added          []string   `json:"added,omitempty"`
 	Removed        []string   `json:"removed,omitempty"`
 	Hashtags       []string   `json:"hashtags,omitempty"`
