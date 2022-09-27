@@ -44,6 +44,7 @@ type Change struct {
 	Status               string `json:"status"`
 	Wip                  bool   `json:"wip,omitempty"`
 	Topic                string `json:"topic,omitempty"`
+	Private              bool   `json:"private,omitempty"`
 }
 
 type ChangeKey struct {
