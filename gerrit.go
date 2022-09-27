@@ -29,22 +29,23 @@ type PatchSet struct {
 }
 
 type Change struct {
-	Project              string `json:"project"`
-	Branch               string `json:"branch"`
-	ID                   string `json:"id"`
-	Number               int    `json:"number"`
-	Subject              string `json:"subject"`
-	Owner                User   `json:"owner"`
-	Assignee             *User  `json:"assignee,omitempty"`
-	URL                  string `json:"url"`
-	CommitMessage        string `json:"commitMessage"`
-	CherryPickOfChange   int    `json:"cherryPickOfChange,omitempty"`
-	CherryPickOfPatchSet int    `json:"cherryPickOfPatchSet,omitempty"`
-	CreatedOn            int    `json:"createdOn"`
-	Status               string `json:"status"`
-	Wip                  bool   `json:"wip,omitempty"`
-	Topic                string `json:"topic,omitempty"`
-	Private              bool   `json:"private,omitempty"`
+	Project              string   `json:"project"`
+	Branch               string   `json:"branch"`
+	ID                   string   `json:"id"`
+	Number               int      `json:"number"`
+	Subject              string   `json:"subject"`
+	Owner                User     `json:"owner"`
+	Assignee             *User    `json:"assignee,omitempty"`
+	URL                  string   `json:"url"`
+	CommitMessage        string   `json:"commitMessage"`
+	CherryPickOfChange   int      `json:"cherryPickOfChange,omitempty"`
+	CherryPickOfPatchSet int      `json:"cherryPickOfPatchSet,omitempty"`
+	CreatedOn            int      `json:"createdOn"`
+	Status               string   `json:"status"`
+	Wip                  bool     `json:"wip,omitempty"`
+	Topic                string   `json:"topic,omitempty"`
+	Private              bool     `json:"private,omitempty"`
+	Hashtags             []string `json:"hashtags,omitempty"`
 }
 
 type ChangeKey struct {
@@ -86,4 +87,8 @@ type EventInfo struct {
 	NodesCount     int        `json:"nodesCount,omitempty"`
 	OldTopic       string     `json:"oldTopic,omitempty"`
 	Changer        *User      `json:"changer,omitempty"`
+	Editor         *User      `json:"editor,omitempty"`
+	Added          []string   `json:"added,omitempty"`
+	Removed        []string   `json:"removed,omitempty"`
+	Hashtags       []string   `json:"hashtags,omitempty"`
 }
