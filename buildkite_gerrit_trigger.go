@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/buildkite/go-buildkite/buildkite"
-	_ "github.com/mattn/go-sqlite3"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -18,6 +16,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/buildkite/go-buildkite/buildkite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Commit struct {
@@ -465,21 +466,29 @@ func main() {
 			case "patchset-created":
 				state.handleEvent(eventInfo, client)
 			case "ref-updated":
-				if eventInfo.RefUpdate.RefName == "refs/heads/master" && eventInfo.RefUpdate.Project == state.Project {
-					if build, _, err := client.Builds.Create(
-						state.BuildkiteOrganization, state.BuildkiteProject, &buildkite.CreateBuild{
-							Commit: eventInfo.RefUpdate.NewRev,
-							Branch: "master",
-							Author: buildkite.Author{
-								Name:  eventInfo.Submitter.Name,
-								Email: eventInfo.Submitter.Email,
-							},
-						}); err == nil {
-						log.Printf("Scheduled master build %s\n", *build.ID)
-					} else {
-						log.Printf("Failed to schedule master build %v", err)
-					}
+				if eventInfo.RefUpdate.Project != state.Project {
+					break
 				}
+				if eventInfo.RefUpdate.RefName != "refs/heads/master" && eventInfo.RefUpdate.RefName != "refs/heads/main" {
+					break
+				}
+				// Eg; "main" or "master"
+				branch := strings.Split(eventInfo.RefUpdate.RefName, "/")[2]
+
+				if build, _, err := client.Builds.Create(
+					state.BuildkiteOrganization, state.BuildkiteProject, &buildkite.CreateBuild{
+						Commit: eventInfo.RefUpdate.NewRev,
+						Branch: branch,
+						Author: buildkite.Author{
+							Name:  eventInfo.Submitter.Name,
+							Email: eventInfo.Submitter.Email,
+						},
+					}); err == nil {
+					log.Printf("Scheduled %s build %s\n", branch, *build.ID)
+				} else {
+					log.Printf("Failed to schedule %s build %v", branch, err)
+				}
+
 			case "reviewer-added":
 			case "reviewer-deleted":
 			case "topic-changed":
