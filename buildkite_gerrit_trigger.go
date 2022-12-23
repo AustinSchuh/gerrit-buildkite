@@ -106,6 +106,7 @@ func (s *State) GetCommit(id string) (Commit, bool) {
 
 // Writes our commit to the database.
 func (s *State) AddCommit(id string, commit Commit) {
+	log.Printf("AddCommit: %#v\n", commit)
 	ctx := context.Background()
 	// Use a transaction so we do the atomic read, add, write.
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -268,7 +269,7 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 
 						// only add commit to DB if not already there
 						// if it is already there then this is probably a retry of a step
-						if c, ok := s.GetCommit(webhook.Build.ID); !ok {
+						if _, ok := s.GetCommit(webhook.Build.ID); !ok {
 							s.AddCommit(webhook.Build.ID, c)
 						} else {
 							log.Printf("This is a retried step.")
