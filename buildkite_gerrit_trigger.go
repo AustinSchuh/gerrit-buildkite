@@ -476,6 +476,15 @@ func main() {
 				// Eg; "main" or "master"
 				branch := strings.Split(eventInfo.RefUpdate.RefName, "/")[2]
 
+				// This is untested wild-west stuff
+				var buildEnv map[string]string
+				if eventInfo.Change != nil && eventInfo.PatchSet != nil {
+					buildEnv = map[string]string{
+						"GERRIT_CHANGE_NUMBER": fmt.Sprintf("%d", eventInfo.Change.Number),
+						"GERRIT_PATCH_NUMBER":  fmt.Sprintf("%d", eventInfo.PatchSet.Number),
+					}
+				}
+
 				if build, _, err := client.Builds.Create(
 					state.BuildkiteOrganization, state.BuildkiteProject, &buildkite.CreateBuild{
 						Commit: eventInfo.RefUpdate.NewRev,
@@ -484,10 +493,7 @@ func main() {
 							Name:  eventInfo.Submitter.Name,
 							Email: eventInfo.Submitter.Email,
 						},
-						Env: map[string]string{
-							"GERRIT_CHANGE_NUMBER": fmt.Sprintf("%d", eventInfo.Change.Number),
-							"GERRIT_PATCH_NUMBER":  fmt.Sprintf("%d", eventInfo.PatchSet.Number),
-						},
+						Env: buildEnv,
 					}); err == nil {
 					log.Printf("Scheduled %s build %s\n", branch, *build.ID)
 				} else {
