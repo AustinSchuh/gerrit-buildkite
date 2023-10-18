@@ -484,10 +484,6 @@ func main() {
 							Name:  eventInfo.Submitter.Name,
 							Email: eventInfo.Submitter.Email,
 						},
-						Env: map[string]string{
-							"GERRIT_CHANGE_NUMBER": fmt.Sprintf("%d", eventInfo.Change.Number),
-							"GERRIT_PATCH_NUMBER":  fmt.Sprintf("%d", eventInfo.PatchSet.Number),
-						},
 					}); err == nil {
 					log.Printf("Scheduled %s build %s\n", branch, *build.ID)
 				} else {
