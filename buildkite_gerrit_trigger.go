@@ -51,7 +51,6 @@ type State struct {
 
 func (s *State) OpenDatabase(database string) {
 	db, err := sql.Open("sqlite3", database)
-
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
@@ -88,12 +87,16 @@ func (s *State) GetCommit(id string) (Commit, bool) {
 	defer tx.Commit()
 
 	var commit Commit
-	statement, err := tx.PrepareContext(ctx, "select sha1, changeid, changenumber, patchset from buildkite where id = ?")
+	statement, err := tx.PrepareContext(
+		ctx,
+		"select sha1, changeid, changenumber, patchset from buildkite where id = ?",
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = statement.QueryRow(id).Scan(&commit.Sha1, &commit.ChangeId, &commit.ChangeNumber, &commit.Patchset)
+	err = statement.QueryRow(id).
+		Scan(&commit.Sha1, &commit.ChangeId, &commit.ChangeNumber, &commit.Patchset)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Fatalf("Failed to query: '%v'", err)
@@ -116,7 +119,10 @@ func (s *State) AddCommit(id string, commit Commit) {
 
 	defer tx.Commit()
 
-	statement, err := tx.PrepareContext(ctx, "insert into buildkite (id, sha1, changeid, changenumber, patchset) VALUES (?, ?, ?, ?, ?)")
+	statement, err := tx.PrepareContext(
+		ctx,
+		"insert into buildkite (id, sha1, changeid, changenumber, patchset) VALUES (?, ?, ?, ?, ?)",
+	)
 	if err != nil {
 		log.Fatalf("Failed to insert %s", err)
 	}
@@ -147,8 +153,13 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 		return
 	}
 
-	log.Printf("Got a matching change of %s %s %d,%d\n",
-		eventInfo.Change.ID, eventInfo.PatchSet.Revision, eventInfo.Change.Number, eventInfo.PatchSet.Number)
+	log.Printf(
+		"Got a matching change of %s %s %d,%d\n",
+		eventInfo.Change.ID,
+		eventInfo.PatchSet.Revision,
+		eventInfo.Change.Number,
+		eventInfo.PatchSet.Number,
+	)
 
 	for {
 		var user *User
@@ -213,9 +224,15 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 				"0",
 				fmt.Sprintf("%d,%d", eventInfo.Change.Number, eventInfo.PatchSet.Number))
 
-			log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --verified 0 %d,%d' and waiting for it to finish...",
-				s.Key, s.User, s.Server,
-				*build.WebURL, eventInfo.Change.Number, eventInfo.PatchSet.Number)
+			log.Printf(
+				"Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --verified 0 %d,%d' and waiting for it to finish...",
+				s.Key,
+				s.User,
+				s.Server,
+				*build.WebURL,
+				eventInfo.Change.Number,
+				eventInfo.PatchSet.Number,
+			)
 			if err := cmd.Run(); err != nil {
 				log.Printf("Command failed with error: %v", err)
 			}
@@ -265,7 +282,11 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 				if webhook.Build.RebuiltFrom != nil {
 					s.mu.Lock()
 					if c, ok := s.GetCommit(webhook.Build.RebuiltFrom.ID); ok {
-						log.Printf("Detected a rebuild of %s for build %s", webhook.Build.RebuiltFrom.ID, webhook.Build.ID)
+						log.Printf(
+							"Detected a rebuild of %s for build %s",
+							webhook.Build.RebuiltFrom.ID,
+							webhook.Build.ID,
+						)
 
 						// only add commit to DB if not already there
 						// if it is already there then this is probably a retry of a step
@@ -293,9 +314,15 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 							"0",
 							fmt.Sprintf("%d,%d", c.ChangeNumber, c.Patchset))
 
-						log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --verified 0 %d,%d' and waiting for it to finish...",
-							s.Key, s.User, s.Server,
-							webhook.Build.WebURL, c.ChangeNumber, c.Patchset)
+						log.Printf(
+							"Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --verified 0 %d,%d' and waiting for it to finish...",
+							s.Key,
+							s.User,
+							s.Server,
+							webhook.Build.WebURL,
+							c.ChangeNumber,
+							c.Patchset,
+						)
 						if err := cmd.Run(); err != nil {
 							log.Printf("Command failed with error: %v", err)
 						}
@@ -358,7 +385,13 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 
 		go f()
 
-		log.Printf("%s: %s %s %s\n", webhook.Event, webhook.Build.ID, webhook.Build.Commit, webhook.Build.Branch)
+		log.Printf(
+			"%s: %s %s %s\n",
+			webhook.Event,
+			webhook.Build.ID,
+			webhook.Build.Commit,
+			webhook.Build.Branch,
+		)
 
 		fmt.Fprintf(w, "")
 
@@ -377,9 +410,21 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable debugging")
 	server := flag.String("server", "software.frc971.org", "Gerrit server to connect to")
 	project := flag.String("project", "971-Robot-Code", "Project to filter events for")
-	buildkiteProject := flag.String("buildkite_project", "971-Robot-Code", "Buildkite project to trigger")
-	buildkiteOrganization := flag.String("organization", "spartan-robotics", "Project to filter events for")
-	database := flag.String("database", "/data/buildkite/buildkite.db", "Database to store builds in.")
+	buildkiteProject := flag.String(
+		"buildkite_project",
+		"971-Robot-Code",
+		"Buildkite project to trigger",
+	)
+	buildkiteOrganization := flag.String(
+		"organization",
+		"spartan-robotics",
+		"Project to filter events for",
+	)
+	database := flag.String(
+		"database",
+		"/data/buildkite/buildkite.db",
+		"Database to store builds in.",
+	)
 
 	flag.Parse()
 
@@ -414,7 +459,6 @@ func main() {
 	}
 
 	config, err := buildkite.NewTokenConfig(*apiToken, *debug)
-
 	if err != nil {
 		log.Fatalf("client config failed: %s", err)
 	}
@@ -422,7 +466,12 @@ func main() {
 	client := buildkite.NewClient(config.Client())
 
 	for {
-		args := fmt.Sprintf("-o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i %s -p 29418 %s@%s gerrit stream-events", state.Key, state.User, state.Server)
+		args := fmt.Sprintf(
+			"-o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i %s -p 29418 %s@%s gerrit stream-events",
+			state.Key,
+			state.User,
+			state.Server,
+		)
 		cmd := exec.Command("ssh", strings.Split(args, " ")...)
 
 		log.Printf("Command: ssh %s\n", args)
@@ -470,7 +519,8 @@ func main() {
 				if eventInfo.RefUpdate.Project != state.Project {
 					break
 				}
-				if eventInfo.RefUpdate.RefName != "refs/heads/master" && eventInfo.RefUpdate.RefName != "refs/heads/main" {
+				if eventInfo.RefUpdate.RefName != "refs/heads/master" &&
+					eventInfo.RefUpdate.RefName != "refs/heads/main" {
 					break
 				}
 				// Eg; "main" or "master"
