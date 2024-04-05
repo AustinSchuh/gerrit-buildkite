@@ -369,6 +369,10 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var (
+	flagEnableCancelOnNewerPatchset bool
+)
+
 func main() {
 	apiToken := flag.String("token", "", "API token")
 	webhookToken := flag.String("webhook_token", "", "Expected webhook token")
@@ -380,6 +384,8 @@ func main() {
 	buildkiteProject := flag.String("buildkite_project", "971-Robot-Code", "Buildkite project to trigger")
 	buildkiteOrganization := flag.String("organization", "spartan-robotics", "Project to filter events for")
 	database := flag.String("database", "/data/buildkite/buildkite.db", "Database to store builds in.")
+
+	flag.BoolVar(&flagEnableCancelOnNewerPatchset, "cancel_on_newer_patchset", false, "Cancel previous patchset builds when a newer patchset is created")
 
 	flag.Parse()
 
