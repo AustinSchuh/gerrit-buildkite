@@ -1,46 +1,70 @@
 package main
 
 import (
-	"os"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
-
-	"github.com/buildkite/go-buildkite/buildkite"
 )
 
+type mockBuildkiteGraphqlApi struct {
+	response *http.Response
+	err      error
+}
+
+func (m *mockBuildkiteGraphqlApi) RoundTrip(req *http.Request) (*http.Response, error) {
+	return m.response, m.err
+}
+
 func TestResolveBuildNumber(t *testing.T) {
-	apiToken := os.Getenv("BUILDKITE_API_TOKEN")
-
-	config, err := buildkite.NewTokenConfig(apiToken, true)
-	if err != nil {
-		t.Fatalf("failed to create Buildkite config: %s", err)
-	}
-	// Warning: This is a hot call
-	client := config.Client()
-
 	type testCase struct {
 		expectation bool
 		output      int
 		input       string
+		mock        *mockBuildkiteGraphqlApi
 	}
 
-	// Warning: These are static values and will not
-	// work for you. Maybe you want a fixture loader?
+	mockApi := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	defer mockApi.Close()
+
 	testCases := []testCase{
 		// Should find the build number for the input UUID
 		{
 			expectation: true,
-			output:      44842,
-			input:       "018e5da3-f391-49a0-bc5d-6a5f60b7ef30",
+			output:      9999,
+			input:       "fake-test-fake-test-fake",
+			mock: &mockBuildkiteGraphqlApi{
+				response: &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader(`{"data": {"build": {"number": 9999}}}`)),
+				},
+				err: nil,
+			},
 		},
 		// Should not find the build number for an absent UUID
 		{
 			expectation: false,
-			output:      9000,
+			output:      0,
 			input:       "fake-test-fake-test-fake",
+			mock: &mockBuildkiteGraphqlApi{
+				response: &http.Response{
+					// Remote API worked
+					StatusCode: http.StatusOK,
+					// GraphQL had no builds matching the "uuid"
+					Body: io.NopCloser(strings.NewReader(`{"data": {"build": {"number": 0}}}`)),
+				},
+				err: nil,
+			},
 		},
 	}
 
 	for id, tc := range testCases {
+		client := mockApi.Client()
+		client.Transport = tc.mock
 		buildNumber, ok := resolveBuildNumber(client, tc.input)
 		if ok != tc.expectation {
 			t.Fatalf("expected to find build uuid %s for case %d but failed", tc.input, id)
