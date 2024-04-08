@@ -21,6 +21,11 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+const (
+	// Query to fetch the latest buildUUID from the database given a change number latest patch at head of sequence
+	getLatestBuildQuery = "select id as builduuid from buildkite where changenumber = ? order by patchset desc;"
+)
+
 type Commit struct {
 	Sha1         string
 	ChangeId     string
@@ -102,6 +107,24 @@ func (s *State) GetCommit(id string) (Commit, bool) {
 	} else {
 		return commit, true
 	}
+}
+
+// TryGetLatestBuild
+// Try to get the build id for the most recent patch of a change number
+// Returns the BuildKite Build UUID and ok bool
+func (s *State) TryGetLatestBuild(changeNumber int) (buildUUID string, ok bool) {
+	statement, err := s.DB.Prepare(getLatestBuildQuery)
+
+	if err != nil {
+
+		return
+	}
+
+	if err := statement.QueryRow(changeNumber).Scan(&buildUUID); err != nil {
+		return
+	}
+
+	return buildUUID, true
 }
 
 // Writes our commit to the database.
@@ -406,7 +429,7 @@ func main() {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			state.handle(w, r)
 		})
-		log.Println("Starting webhook server on 10005\n")
+		log.Println("Starting webhook server on 10005")
 		if err := http.ListenAndServe(":10005", nil); err != nil {
 			log.Fatal(err)
 		}
