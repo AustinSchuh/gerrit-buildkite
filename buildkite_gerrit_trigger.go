@@ -24,6 +24,8 @@ import (
 const (
 	// Query to fetch the latest buildUUID from the database given a change number latest patch at head of sequence
 	getLatestBuildQuery = "select id as builduuid from buildkite where changenumber = ? order by patchset desc;"
+	// Buildkite GraphQL endpoint
+	buildkiteGraphQLApi = "https://graphql.buildkite.com/v1"
 )
 
 type Commit struct {
@@ -116,7 +118,6 @@ func (s *State) TryGetLatestBuild(changeNumber int) (buildUUID string, ok bool) 
 	statement, err := s.DB.Prepare(getLatestBuildQuery)
 
 	if err != nil {
-
 		return
 	}
 
@@ -150,6 +151,58 @@ func (s *State) AddCommit(id string, commit Commit) {
 }
 
 // Simple application to poll Gerrit for events and trigger builds on buildkite when one happens.
+
+type buildNumberQueryResponse struct {
+	Data struct {
+		Build struct {
+			Number int
+		}
+	}
+}
+type buildNumberQuery struct {
+	Query string `json:"query"`
+}
+
+// resolveBuildNumber
+// Resolves a BuildKite Build UUID to a build number
+func resolveBuildNumber(c *http.Client, buildUUID string) (buildNumber int, ok bool) {
+	buf := &bytes.Buffer{}
+	encoder := json.NewEncoder(buf)
+	encoder.Encode(buildNumberQuery{
+		Query: fmt.Sprintf(`query GetBuilds { build(uuid: "%s") { number } }`, buildUUID),
+	})
+	request, err := http.NewRequest(
+		http.MethodPost,
+		buildkiteGraphQLApi,
+		buf,
+	)
+
+	if err != nil {
+		return
+	}
+
+	response, err := c.Do(request)
+	if err != nil {
+		log.Printf("error: unable to call BuildKite Graphql API: %s", err)
+		return
+	}
+	if response.StatusCode != http.StatusOK {
+		log.Printf("error: unexpected https GraphQL response code: %d", response.StatusCode)
+		return
+	}
+
+	decoder := json.NewDecoder(response.Body)
+	queryResponse := &buildNumberQueryResponse{}
+	if err := decoder.Decode(queryResponse); err != nil {
+		return
+	}
+
+	if queryResponse.Data.Build.Number == 0 {
+		log.Printf("warn: Found no builds matching UUID %s", buildUUID)
+		return
+	}
+	return queryResponse.Data.Build.Number, true
+}
 
 // Handles a gerrit event and triggers buildkite accordingly.
 func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
