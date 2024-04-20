@@ -59,7 +59,8 @@ type RefUpdate struct {
 	Project string `json:"project"`
 }
 
-type EventInfo struct {
+// Event represents a Gerrit event.
+type Event struct {
 	Abandoner      *User      `json:"abandoner,omitempty"`
 	Author         *User      `json:"author"`
 	Uploader       *User      `json:"uploader"`
