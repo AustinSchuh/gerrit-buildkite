@@ -14,6 +14,8 @@ type Backend interface {
 	SaveBuild(context.Context, *PatchBuild) error
 	// GetBuild retrieves a build and patch information from the backend
 	GetBuild(ctx context.Context, buildNumber int) (*PatchBuild, error)
+	// GetPatch retrieves a build by patch and change number from the backend
+	GetPatch(context.Context, *Patch) (*PatchBuild, error)
 }
 
 // Patch represents a Gerrit patch revision

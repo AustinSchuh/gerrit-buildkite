@@ -24,17 +24,79 @@ type BuildPipeline interface {
 
 type EventHandlerFunc func(Event, BuildPipeline, backend.Backend) error
 
+func createAndSaveBuild(p BuildPipeline, b backend.Backend, event Event, build *buildkite.CreateBuild) error {
+	buildNumber, err := p.CreateBuild(build)
+	if err != nil {
+		log.Error().Err(err).
+			Str("eventType", event.Type).
+			Int("patch", event.PatchSet.Number).
+			Int("change", event.Change.Number).
+			Msg("Failed to create build")
+		return err
+	}
+	pb := &backend.PatchBuild{
+		BuildNumber: buildNumber,
+		Patch: &backend.Patch{
+			Number: event.PatchSet.Number,
+			Change: event.Change.Number,
+		},
+	}
+	ctx := context.TODO()
+	log.Debug().
+		Str("eventType", event.Type).
+		Int("patch", event.PatchSet.Number).
+		Int("change", event.Change.Number).
+		Int("buildNumber", buildNumber).
+		Msg("Saving patch build information")
+	return b.SaveBuild(ctx, pb)
+}
+
+type commandFunc func(event Event, p BuildPipeline, b backend.Backend) error
+
+var (
+	commentCommands = map[*regexp.Regexp]commandFunc{
+		regexp.MustCompile(`(?mi)^retest$`): handleRetestComment,
+	}
+)
+
+func handleRetestComment(event Event, p BuildPipeline, b backend.Backend) error {
+	log.Info().
+		Str("eventType", event.Type).
+		Int("patch", event.PatchSet.Number).
+		Int("change", event.Change.Number).
+		Msg("Retesting patchset")
+	patch := &backend.Patch{
+		Number:   event.PatchSet.Number,
+		Change:   event.Change.Number,
+		Revision: event.PatchSet.Revision,
+	}
+	log.Debug().
+		Str("eventType", event.Type).
+		Str("patchRevision", patch.Revision).
+		Int("change", patch.Change).
+		Int("patchNumber", patch.Number).
+		Msg("Creating build")
+	build := &buildkite.CreateBuild{
+		Commit: event.PatchSet.Revision,
+		Branch: event.Change.ID,
+		Author: buildkite.Author{
+			Name:  event.PatchSet.Author.Name,
+			Email: event.PatchSet.Author.Email,
+		},
+	}
+	return createAndSaveBuild(p, b, event, build)
+}
+
 func HandleCommentAdded(event Event, p BuildPipeline, b backend.Backend) error {
 	comment := event.Comment
 
-	if ok, _ := regexp.MatchString(`(?mi)^retest$`, comment); ok {
-		log.Info().
-			Str("eventType", event.Type).
-			Int("patchNumber", event.PatchSet.Number).
-			Int("change", event.Change.Number).
-			Msg("Retesting patchset")
-
+	for expression, cmdFunc := range commentCommands {
+		log.Debug().Str("comment", comment).Msg("Checking comment for command")
+		if expression.MatchString(comment) {
+			return cmdFunc(event, p, b)
+		}
 	}
+	log.Debug().Msg("No command found in comment")
 	return nil
 }
 
@@ -49,7 +111,7 @@ func HandlePatchsetCreated(event Event, p BuildPipeline, b backend.Backend) erro
 	log.Trace().Any("event", event).Msg("Handling patchset created")
 	log.Debug().
 		Str("eventType", event.Type).
-		Int("patchNumber", event.PatchSet.Number).
+		Int("patch", event.PatchSet.Number).
 		Int("change", event.Change.Number).
 		Str("authorName", event.PatchSet.Author.Name).
 		Str("authorEmail", event.PatchSet.Author.Email).
@@ -60,40 +122,47 @@ func HandlePatchsetCreated(event Event, p BuildPipeline, b backend.Backend) erro
 		Change:   event.Change.Number,
 		Revision: event.PatchSet.Revision,
 	}
+
+	// Cancel previous build if it exists
+	if patch.Number > 1 {
+		prevPatch := &backend.Patch{
+			Number: patch.Number - 1,
+			Change: patch.Change,
+		}
+		if pb, err := b.GetPatch(context.TODO(), prevPatch); err == nil {
+			log.Debug().
+				Str("eventType", event.Type).
+				Str("eventType", event.Type).
+				Int("patch", patch.Number).
+				Int("change", patch.Change).
+				Int("prevPatch", prevPatch.Number).
+				Msg("Cancelling previous build")
+			if err := p.CancelBuild(pb.BuildNumber); err != nil {
+				log.Error().
+					Err(err).
+					Str("eventType", event.Type).
+					Int("patch", patch.Number).
+					Int("change", patch.Change).
+					Int("prevPatch", prevPatch.Number).
+					Msg("Failed to cancel build")
+			}
+		}
+	}
 	log.Debug().
 		Str("eventType", event.Type).
 		Str("patchRevision", patch.Revision).
 		Int("change", patch.Change).
 		Int("patchNumber", patch.Number).
 		Msg("Creating build")
-	buildNumber, err := p.CreateBuild(&buildkite.CreateBuild{
+	build := &buildkite.CreateBuild{
 		Commit: event.PatchSet.Revision,
 		Branch: event.Change.ID,
 		Author: buildkite.Author{
 			Name:  event.PatchSet.Author.Name,
 			Email: event.PatchSet.Author.Email,
 		},
-	})
-	if err != nil {
-		log.Error().Err(err).
-			Str("eventType", event.Type).
-			Int("patchNumber", event.PatchSet.Number).
-			Int("change", event.Change.Number).
-			Msg("Failed to create build")
-		return err
 	}
-	pb := &backend.PatchBuild{
-		BuildNumber: buildNumber,
-		Patch:       patch,
-	}
-	ctx := context.TODO()
-	log.Debug().
-		Str("eventType", event.Type).
-		Int("patchNumber", event.PatchSet.Number).
-		Int("change", event.Change.Number).
-		Int("buildNumber", buildNumber).
-		Msg("Saving patch build information")
-	return b.SaveBuild(ctx, pb)
+	return createAndSaveBuild(p, b, event, build)
 }
 
 func HandleRefUpdated(event Event, p BuildPipeline, b backend.Backend) error {
@@ -106,13 +175,13 @@ func HandleRefUpdated(event Event, p BuildPipeline, b backend.Backend) error {
 	}()
 	log.Debug().
 		Str("eventType", event.Type).
-		Int("patchNumber", event.PatchSet.Number).
+		Int("patch", event.PatchSet.Number).
 		Int("change", event.Change.Number).
 		Str("refName", event.RefUpdate.RefName).Msg("Ref updated")
 	if ok, _ := regexp.MatchString(`^refs/heads/(master|main)`, event.RefUpdate.RefName); ok {
 		log.Info().
 			Str("eventType", event.Type).
-			Int("patchNumber", event.PatchSet.Number).
+			Int("patch", event.PatchSet.Number).
 			Int("change", event.Change.Number).
 			Msg("Trunk Updated")
 	}

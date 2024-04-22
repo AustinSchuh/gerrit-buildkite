@@ -76,3 +76,19 @@ func (b *RedisBackend) GetBuild(ctx context.Context, buildNumber int) (*PatchBui
 		Patch:       patch,
 	}, nil
 }
+
+// GetPatch retrieves a build by patch and change number from the backend
+func (b *RedisBackend) GetPatch(ctx context.Context, p *Patch) (*PatchBuild, error) {
+	key := fmt.Sprintf("patchChange:%s", p.PatchSlug())
+	buildNumber, err := b.Get(ctx, key).Int()
+	if err == redis.Nil {
+		return nil, ErrBuildNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &PatchBuild{
+		BuildNumber: buildNumber,
+		Patch:       p,
+	}, nil
+}

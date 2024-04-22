@@ -147,7 +147,7 @@ func (s *GerritSSHClient) Listen(events chan<- Event) {
 				log.Error().Err(err).Msg("Failed to decode Gerrit event")
 				return
 			}
-			log.Debug().Str("eventType", event.Type).Msgf("Dispatching recieved event %s", event.Type)
+			log.Debug().Str("eventType", event.Type).Msgf("Dispatching received event %s", event.Type)
 			events <- event
 		}
 		log.Debug().Msg("Closing SSH connection to Gerrit")

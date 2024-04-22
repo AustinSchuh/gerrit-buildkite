@@ -116,7 +116,7 @@ func HandleWebhookEvents(events chan BuildkiteWebhook, r GerritReviewWriter, b b
 				log.Err(err).
 					Str("webhookEvent", webhook.Event).
 					Int("buildNumber", pb.BuildNumber).
-					Int("patchNumber", pb.Patch.Number).
+					Int("patch", pb.Patch.Number).
 					Int("change", pb.Patch.Change).
 					Int("webhookBuildNumber", webhook.Build.Number).
 					Str("webhookBuildState", webhook.Build.State).
@@ -133,10 +133,10 @@ func HandleWebhookEvents(events chan BuildkiteWebhook, r GerritReviewWriter, b b
 			}
 			patchMessage := fmt.Sprintf("for Change %d Patch %d", pb.Patch.Change, pb.Patch.Number)
 
-			message := fmt.Sprintf("**PASS**\n[Build %d Passed](%s) %s", pb.BuildNumber, webhook.Build.WebURL, patchMessage)
+			message := fmt.Sprintf("[Build %d Passed](%s) %s", pb.BuildNumber, webhook.Build.WebURL, patchMessage)
 			reviewState := ReviewStateVerified
 			if webhook.Build.State == "failed" {
-				message = fmt.Sprintf("**FAIL**\n[Build %d Failed](%s) %s", pb.BuildNumber, webhook.Build.WebURL, patchMessage)
+				message = fmt.Sprintf("[Build %d Failed](%s) %s", pb.BuildNumber, webhook.Build.WebURL, patchMessage)
 				reviewState = ReviewStateRejected
 			}
 			if err := r.SetReviewState(&Review{
@@ -147,7 +147,7 @@ func HandleWebhookEvents(events chan BuildkiteWebhook, r GerritReviewWriter, b b
 				log.Err(err).
 					Str("webhookEvent", webhook.Event).
 					Int("buildNumber", pb.BuildNumber).
-					Int("patchNumber", pb.Patch.Number).
+					Int("patch", pb.Patch.Number).
 					Int("change", pb.Patch.Change).
 					Int("webhookBuildNumber", webhook.Build.Number).
 					Str("webhookBuildState", webhook.Build.State).
@@ -156,30 +156,20 @@ func HandleWebhookEvents(events chan BuildkiteWebhook, r GerritReviewWriter, b b
 			// TODO: Notify Gerrit of build finished
 		case "build.scheduled":
 			log.Info().Str("event", webhook.Event).Msg("Build scheduled")
-		case "build.canceled":
-			log.Info().Str("event", webhook.Event).Msg("Build canceled")
+		case "build.cancelled":
+			log.Info().Str("event", webhook.Event).Msg("Build cancelled")
 			ctx := context.TODO()
 			pb, err := b.GetBuild(ctx, webhook.Build.Number)
 			if err != nil {
 				log.Err(err).Msg("Failed to get build")
 				return
 			}
-			message := fmt.Sprintf("[Build %d Canceled](%s) for Change %d Patch %d", pb.BuildNumber, webhook.Build.WebURL, pb.Patch.Change, pb.Patch.Number)
+			log.Info().
+				Int("change", pb.Patch.Change).
+				Int("patch", pb.Patch.Number).
+				Int("buildNumber", pb.BuildNumber).
+				Msg("Cancelled build")
 
-			if err := r.SetReviewState(&Review{
-				Patch:   pb.Patch,
-				Message: message,
-				State:   ReviewStateUnverified,
-			}); err != nil {
-				log.Err(err).
-					Str("webhookEvent", webhook.Event).
-					Int("buildNumber", pb.BuildNumber).
-					Int("patchNumber", pb.Patch.Number).
-					Int("change", pb.Patch.Change).
-					Int("webhookBuildNumber", webhook.Build.Number).
-					Str("webhookBuildState", webhook.Build.State).
-					Msg("Failed to set review state")
-			}
 		default:
 			log.Warn().Str("event", webhook.Event).Msg("Unknown event")
 		}
