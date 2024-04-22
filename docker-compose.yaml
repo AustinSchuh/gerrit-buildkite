@@ -1,0 +1,26 @@
+version: '3'
+
+services:
+  redis:
+    image: redis
+    volumes:
+      - type: bind
+        source: ./redis-data
+        target: /data
+    ports:
+      - "6379:6379"
+  gerrit:
+    image: gerritcodereview/gerrit
+    volumes:
+      - type: bind
+        source: ./gerrit-root/git
+        target: /var/gerrit/git
+      - type: bind
+        source: ./gerrit-root/index
+        target: /var/gerrit/index
+      - type: bind
+        source: ./gerrit-root/cache
+        target: /var/gerrit/cache
+    ports:
+       - "29418:29418"
+       - "8080:8080"

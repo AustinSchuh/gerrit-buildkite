@@ -61,25 +61,25 @@ type RefUpdate struct {
 
 // Event represents a Gerrit event.
 type Event struct {
-	Abandoner      *User      `json:"abandoner,omitempty"`
-	Author         *User      `json:"author"`
+	Abandoner *User `json:"abandoner,omitempty"`
+	// Author         *User      `json:"author"`
 	Uploader       *User      `json:"uploader"`
 	Reviewer       *User      `json:"reviewer"`
 	Adder          *User      `json:"adder"`
 	Remover        *User      `json:"remover"`
-	Submitter      User       `json:"submitter,omitempty"`
+	Submitter      *User      `json:"submitter,omitempty"`
 	NewRev         string     `json:"newRev,omitempty"`
 	Ref            string     `json:"ref,omitempty"`
 	TargetNode     string     `json:"targetNode,omitempty"`
 	TargetUri      string     `json:"targetUri,omitempty"`
 	Approvals      []Approval `json:"approvals,omitempty"`
 	Comment        string     `json:"comment,omitempty"`
-	PatchSet       *PatchSet  `json:"patchSet"`
-	Change         *Change    `json:"change"`
+	PatchSet       PatchSet   `json:"patchSet"`
+	Change         Change     `json:"change"`
 	Project        string     `json:"project"`
 	RefName        string     `json:"refName"`
 	ChangeKey      ChangeKey  `json:"changeKey"`
-	RefUpdate      *RefUpdate `json:"refUpdate"`
+	RefUpdate      RefUpdate  `json:"refUpdate"`
 	Type           string     `json:"type"`
 	Reason         string     `json:"reason,omitempty"`
 	EventCreatedOn int        `json:"eventCreatedOn"`
