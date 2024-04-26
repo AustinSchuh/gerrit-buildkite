@@ -15,12 +15,16 @@ var (
 		"ref-updated":      HandleRefUpdated,
 		"comment-added":    HandleCommentAdded,
 	}
+	commentCommands = map[*regexp.Regexp]commandFunc{
+		regexp.MustCompile(`(?mi)^retest$`): handleRetestComment,
+	}
 )
 
 type BuildPipeline interface {
 	CreateBuild(*buildkite.CreateBuild) (buildNumber int, err error)
 	CancelBuild(buildNumber int) error
 }
+type commandFunc func(event Event, p BuildPipeline, b backend.Backend) error
 
 type EventHandlerFunc func(Event, BuildPipeline, backend.Backend) error
 
@@ -50,14 +54,6 @@ func createAndSaveBuild(p BuildPipeline, b backend.Backend, event Event, build *
 		Msg("Saving patch build information")
 	return b.SaveBuild(ctx, pb)
 }
-
-type commandFunc func(event Event, p BuildPipeline, b backend.Backend) error
-
-var (
-	commentCommands = map[*regexp.Regexp]commandFunc{
-		regexp.MustCompile(`(?mi)^retest$`): handleRetestComment,
-	}
-)
 
 func handleRetestComment(event Event, p BuildPipeline, b backend.Backend) error {
 	log.Info().
@@ -104,6 +100,7 @@ func HandlePatchsetCreated(event Event, p BuildPipeline, b backend.Backend) erro
 	defer func() {
 		if err := recover(); err != nil {
 			log.Error().
+				Any("panic", err).
 				Str("handler", "HandlePatchsetCreated").
 				Msg("Panic recovered")
 		}
@@ -169,6 +166,7 @@ func HandleRefUpdated(event Event, p BuildPipeline, b backend.Backend) error {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Error().
+				Any("panic", err).
 				Str("handler", "HandleRefUpdated").
 				Msg("Panic recovered")
 		}
