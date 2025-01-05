@@ -232,11 +232,11 @@ func (s *State) handleEvent(eventInfo EventInfo, client *buildkite.Client) {
 				// Don't email out the initial link to lower the spam.
 				"-n",
 				"NONE",
-				"--verified",
-				"0",
+				"--label",
+				"Verified=0",
 				fmt.Sprintf("%d,%d", eventInfo.Change.Number, eventInfo.PatchSet.Number))
 
-			log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --verified 0 %d,%d' and waiting for it to finish...",
+			log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --label Verified=0 %d,%d' and waiting for it to finish...",
 				s.Key, s.User, s.Server,
 				*build.WebURL, eventInfo.Change.Number, eventInfo.PatchSet.Number)
 			if err := cmd.Run(); err != nil {
@@ -312,11 +312,11 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 							// Don't email out the initial link to lower the spam.
 							"-n",
 							"NONE",
-							"--verified",
-							"0",
+							"--label",
+							"Verified=0",
 							fmt.Sprintf("%d,%d", c.ChangeNumber, c.Patchset))
 
-						log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --verified 0 %d,%d' and waiting for it to finish...",
+						log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build Started: %s\"' -n NONE --label Verified=0 %d,%d' and waiting for it to finish...",
 							s.Key, s.User, s.Server,
 							webhook.Build.WebURL, c.ChangeNumber, c.Patchset)
 						if err := cmd.Run(); err != nil {
@@ -359,11 +359,11 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 						"review",
 						"-m",
 						fmt.Sprintf("\"Build %s: %s\"", status, webhook.Build.WebURL),
-						"--verified",
-						verify,
+						"--label",
+						fmt.Sprintf("Verified=%s", verify),
 						fmt.Sprintf("%d,%d", commit.ChangeNumber, commit.Patchset))
 
-					log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build %s: %s\"' --verified %s %d,%d' and waiting for it to finish...",
+					log.Printf("Running 'ssh -p 29418 -i %s %s@%s gerrit review -m '\"Build %s: %s\"' --label Verified=%s %d,%d' and waiting for it to finish...",
 						s.Key, s.User, s.Server,
 						status, webhook.Build.WebURL, verify, commit.ChangeNumber, commit.Patchset)
 					if err := cmd.Run(); err != nil {
