@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -392,6 +393,60 @@ func (s *State) handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *State) listUsers() []string {
+	cmd := exec.Command("ssh", "-i", s.Key, "-p", "29418", fmt.Sprintf("%s@%s", s.User, s.Server), "gerrit", "ls-members", "'Verified Users'", "--recursive")
+
+	log.Printf("Command: ssh %s\n", strings.Join(cmd.Args, " "))
+
+	stdout, _ := cmd.StdoutPipe()
+	cmd.Start()
+
+	scanner := bufio.NewScanner(stdout)
+	maxBufferSize := 1024 * 1024
+	scanner.Buffer(make([]byte, maxBufferSize), maxBufferSize)
+	scanner.Split(bufio.ScanLines)
+	// Skip the header
+	if scanner.Scan() {
+		_ = scanner.Text()
+	}
+	// Each line looks like:
+	// id      username        full name       email
+	// 1000000 AustinSchuh     Austin Schuh    austin.linux@gmail.com
+	//
+	// Grab the username
+	result := []string{}
+	for scanner.Scan() {
+		m := scanner.Text()
+		fields := strings.Fields(m)
+		if len(fields) >= 2 {
+			result = append(result, fields[1])
+		}
+	}
+	cmd.Wait()
+	return result
+}
+
+func (s *State) authorizedUser(eventInfo EventInfo) bool {
+	var author *string = nil
+	if eventInfo.Uploader != nil {
+		author = &eventInfo.Uploader.Username
+	} else if eventInfo.Author != nil {
+		author = &eventInfo.Author.Username
+	}
+	if author == nil {
+		log.Printf("No author")
+		return false
+	}
+
+	users := s.listUsers()
+	if !slices.Contains(users, *author) {
+		log.Printf("Event uploader of %s is not authorized to trigger buildkite, authorized users are: ['%s']\n", *author, strings.Join(users, "', '"))
+		return false
+	}
+
+	return true
+}
+
 var (
 	flagEnableCancelOnNewerPatchset bool
 )
@@ -476,8 +531,8 @@ func main() {
 				log.Printf("Failed to parse JSON: %e\n", err)
 				continue
 			}
-
 			log.Printf("Got an event of type: '%s'\n", eventInfo.Type)
+
 			switch eventInfo.Type {
 			case "assignee-changed":
 			case "change-abandoned":
@@ -485,6 +540,10 @@ func main() {
 			case "change-merged":
 			case "change-restored":
 			case "comment-added":
+				if !state.authorizedUser(eventInfo) {
+					continue
+				}
+
 				if matched, _ := regexp.MatchString(`(?m)^retest$`, eventInfo.Comment); !matched {
 					continue
 				}
@@ -494,6 +553,9 @@ func main() {
 			case "hashtags-changed":
 			case "project-created":
 			case "patchset-created":
+				if !state.authorizedUser(eventInfo) {
+					continue
+				}
 				state.handleEvent(eventInfo, client)
 			case "ref-updated":
 				if eventInfo.RefUpdate.Project != state.Project {
